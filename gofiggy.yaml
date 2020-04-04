@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gofiggy
+  namespace: default
+spec:
+  serviceAccountName: gofiggy
+  containers:
+    - image: localhost:5000/gofiggy
+      imagePullPolicy: Always
+      name: gofiggy
+    - image: gcr.io/skippbox/kubectl:v1.3.0
+      args:
+        - proxy
+        - "-p"
+        - "8080"
+      name: proxy
+      imagePullPolicy: Always
+  restartPolicy: Always
