@@ -1,7 +1,9 @@
 package events
 
 import (
-	"github.com/rs/zerolog/log"
+	"os"
+
+	"github.com/rs/zerolog"
 	api_v1 "k8s.io/api/core/v1"
 )
 
@@ -56,19 +58,25 @@ func convertActionToStatus(action string) string {
 	return ""
 }
 
-type MockHandler struct {}
+type MockHandler struct {
+	logger zerolog.Logger
+}
+
+func NewMockHandler() MockHandler {
+	return MockHandler{logger: zerolog.New(os.Stderr).With().Timestamp().Logger()}
+}
 
 func (mh MockHandler) ObjectCreated(obj interface{}) {
 	ev := New(obj, "created")
-	log.Log().Fields(map[string]interface{}{"event": ev})
+	mh.logger.Log().Fields(map[string]interface{}{"event": ev}).Msg("received created event")
 }
 
 func (mh MockHandler) ObjectDeleted(obj interface{}) {
 	ev := New(obj, "deleted")
-	log.Log().Fields(map[string]interface{}{"event": ev})
+	mh.logger.Log().Fields(map[string]interface{}{"event": ev}).Msg("received deleted event")
 }
 
 func (mh MockHandler) ObjectUpdated(oldObj interface{}, newObj interface{}) {
 	ev := New(newObj, "updated")
-	log.Log().Fields(map[string]interface{}{"event": ev})
+	mh.logger.Log().Fields(map[string]interface{}{"event": ev}).Msg("received updated event")
 }

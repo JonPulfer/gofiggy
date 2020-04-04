@@ -6,6 +6,6 @@ import (
 )
 
 func main() {
-	var eventHandler = events.MockHandler{}
+	var eventHandler = events.NewMockHandler()
 	controller.Start("default", eventHandler)
 }

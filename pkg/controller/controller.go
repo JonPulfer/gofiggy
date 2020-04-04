@@ -9,7 +9,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	api_v1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -178,13 +177,17 @@ func (c *Controller) processItem(newEvent Event) error {
 		return errors.New(fmt.Sprintf("Error fetching object with key %s from store: %v", newEvent.key, err))
 	}
 	objectMeta := utils.GetObjectMetaData(obj)
-	log.Log().Msg("Handling event")
+	c.logger.Log().Msg("Handling event")
 
 	switch newEvent.eventType {
 	case "create":
 		if objectMeta.CreationTimestamp.Sub(c.serverStartTime).Seconds() > 0 {
-			c.eventHandler.ObjectCreated(obj)
-			log.Log().Msg("object create handled")
+			kbEvent := events.Event{
+				Kind: newEvent.resourceType,
+				Name: newEvent.key,
+			}
+			c.eventHandler.ObjectCreated(kbEvent)
+			c.logger.Log().Msgf("object create handled: %#v", kbEvent)
 			return nil
 		}
 	case "update":
@@ -193,7 +196,7 @@ func (c *Controller) processItem(newEvent Event) error {
 			Name: newEvent.key,
 		}
 		c.eventHandler.ObjectUpdated(obj, kbEvent)
-		log.Log().Msg("object update handled")
+		c.logger.Log().Msgf("object update handled: %#v", kbEvent)
 		return nil
 	case "delete":
 		kbEvent := events.Event{
@@ -202,7 +205,7 @@ func (c *Controller) processItem(newEvent Event) error {
 			Namespace: newEvent.namespace,
 		}
 		c.eventHandler.ObjectDeleted(kbEvent)
-		log.Log().Msg("object delete handled")
+		c.logger.Log().Msgf("object delete handled: %#v", kbEvent)
 		return nil
 	}
 	return nil

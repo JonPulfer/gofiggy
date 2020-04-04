@@ -1,4 +1,6 @@
 FROM golang:1.14 AS builder
+LABEL stage=builder
+
 WORKDIR /app/
 
 COPY go.mod go.sum /app/
