@@ -26,6 +26,18 @@ func TestParseAnnotationData(t *testing.T) {
 	}
 }
 
+func TestStripNamespaceFromName(t *testing.T) {
+	rawName := "default/the-name"
+	gotName := stripNamespaceFromName(rawName)
+	if gotName != "the-name" {
+		t.FailNow()
+	}
+
+	if stripNamespaceFromName("short-name") != "short-name" {
+		t.FailNow()
+	}
+}
+
 func TestFetchSiteData(t *testing.T) {
 	fRequest, _ := parseAnnotationData("joke=curl-a-joke.herokuapp.com")
 	fResp, err := fetchSiteData(fRequest)
