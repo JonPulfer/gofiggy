@@ -188,6 +188,7 @@ func (c *Controller) processItem(newEvent Event) error {
 			}
 			c.eventHandler.ObjectCreated(kbEvent)
 			c.logger.Log().Msgf("object create handled: %#v", kbEvent)
+
 			return nil
 		}
 	case "update":
