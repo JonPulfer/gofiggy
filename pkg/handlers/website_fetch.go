@@ -14,7 +14,6 @@ import (
 	api_v1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	"github.com/JonPulfer/gofiggy/pkg/events"
 	"github.com/JonPulfer/gofiggy/pkg/utils"
@@ -23,7 +22,8 @@ import (
 const CurlAnnotation = "x-k8s.io/curl-me-that"
 
 type WebsiteFetchHandler struct {
-	logger zerolog.Logger
+	logger    zerolog.Logger
+	clientset kubernetes.Interface
 }
 
 // WebsiteFetchHandler watches for creation and updates to configmaps to see
@@ -33,7 +33,8 @@ type WebsiteFetchHandler struct {
 // setting the key and adding the site content as the data.
 func NewWebsiteFetchHandler() WebsiteFetchHandler {
 	return WebsiteFetchHandler{
-		logger: zerolog.New(os.Stderr).With().Timestamp().Logger(),
+		logger:    zerolog.New(os.Stderr).With().Timestamp().Logger(),
+		clientset: utils.GetClient(),
 	}
 }
 
@@ -41,6 +42,22 @@ func (wfh WebsiteFetchHandler) ObjectCreated(obj interface{}) {
 	ev := events.New(obj, "created")
 	wfh.logger.Log().Fields(map[string]interface{}{"event": ev}).
 		Msg("received created event")
+
+	wfh.logger.Log().Fields(map[string]interface{}{"event": ev}).
+		Msg("fetching config map")
+
+	configMap, err := fetchConfigMap(wfh.clientset, "default",
+		stripNamespaceFromName(ev.Name))
+	if err != nil {
+		wfh.logger.Log().Msg(err.Error())
+	}
+	wfh.logger.Log().Fields(map[string]interface{}{"configMaps": configMap}).
+		Msg("response from fetchConfigMap")
+
+	if err := processConfigMap(wfh.clientset, "default", configMap); err != nil {
+		wfh.logger.Log().Err(err).
+			Msg("failed to process the created configMap")
+	}
 }
 
 func (wfh WebsiteFetchHandler) ObjectDeleted(obj interface{}) {
@@ -57,7 +74,7 @@ func (wfh WebsiteFetchHandler) ObjectUpdated(oldObj interface{}, newObj interfac
 	wfh.logger.Log().Fields(map[string]interface{}{"event": ev}).
 		Msg("fetching config map")
 
-	configMap, err := fetchConfigMap("default",
+	configMap, err := fetchConfigMap(wfh.clientset, "default",
 		stripNamespaceFromName(ev.Name))
 	if err != nil {
 		wfh.logger.Log().Msg(err.Error())
@@ -65,29 +82,9 @@ func (wfh WebsiteFetchHandler) ObjectUpdated(oldObj interface{}, newObj interfac
 	wfh.logger.Log().Fields(map[string]interface{}{"configMaps": configMap}).
 		Msg("response from fetchConfigMap")
 
-	if configMap != nil {
-		if configMapHasAnnotation(configMap) {
-			wfh.logger.Log().Fields(map[string]interface{}{"configMaps": configMap}).
-				Msg("has the annotation we are interested in")
-
-			fReq, err := parseAnnotationData(configMap.Annotations[CurlAnnotation])
-			if err != nil {
-				wfh.logger.Log().Fields(map[string]interface{}{"configMaps": configMap}).
-					Err(err).Msg("failed to parse the annotation")
-			}
-			fResp, err := fetchSiteData(fReq)
-			if err != nil {
-				wfh.logger.Log().Fields(map[string]interface{}{"configMaps": configMap}).
-					Err(err).
-					Msg("failed to fetch the site provided in the annotation")
-			}
-			configMap.Data[fResp.Key] = fResp.Value
-			if err := updateConfigMap("default", configMap); err != nil {
-				wfh.logger.Log().Fields(map[string]interface{}{"configMaps": configMap}).
-					Err(err).
-					Msg("failed to update the configMap")
-			}
-		}
+	if err := processConfigMap(wfh.clientset, "default", configMap); err != nil {
+		wfh.logger.Log().Err(err).
+			Msg("failed to process the updated configMap")
 	}
 }
 
@@ -164,15 +161,8 @@ func fetchSiteData(fRequest *FetchRequest) (*FetchResponse, error) {
 	}, nil
 }
 
-func fetchConfigMap(namespace string, configMapName string) (*api_v1.ConfigMap, error) {
-
-	var kubeClient kubernetes.Interface
-	_, err := rest.InClusterConfig()
-	if err != nil {
-		kubeClient = utils.GetClientOutOfCluster()
-	} else {
-		kubeClient = utils.GetClient()
-	}
+// fetchConfigMap using a kubernetes client.
+func fetchConfigMap(kubeClient kubernetes.Interface, namespace string, configMapName string) (*api_v1.ConfigMap, error) {
 
 	configMap, err := kubeClient.CoreV1().ConfigMaps(namespace).
 		Get(configMapName, v1.GetOptions{})
@@ -183,19 +173,43 @@ func fetchConfigMap(namespace string, configMapName string) (*api_v1.ConfigMap, 
 	return configMap, nil
 }
 
-func updateConfigMap(namespace string, configMap *api_v1.ConfigMap) error {
-	var kubeClient kubernetes.Interface
-	_, err := rest.InClusterConfig()
-	if err != nil {
-		kubeClient = utils.GetClientOutOfCluster()
-	} else {
-		kubeClient = utils.GetClient()
+// processConfigMap to see whether it has the appropriate annotation. Extract
+// the site data request from the annotation and then add the data field with
+// the request key.
+func processConfigMap(
+	kubeClient kubernetes.Interface,
+	namespace string,
+	configMap *api_v1.ConfigMap) error {
+	if configMap != nil {
+		if configMapHasAnnotation(configMap) {
+			fReq, err := parseAnnotationData(configMap.Annotations[CurlAnnotation])
+			if err != nil {
+				return err
+			}
+			fResp, err := fetchSiteData(fReq)
+			if err != nil {
+				return err
+			}
+			configMap.Data[fResp.Key] = fResp.Value
+			if err := updateConfigMap(kubeClient, namespace, configMap); err != nil {
+				return err
+			}
+		}
 	}
 
-	_, err = kubeClient.CoreV1().ConfigMaps(namespace).Update(configMap)
+	return nil
+}
+
+// updateConfigMap applies the changed configMap to the namespace.
+func updateConfigMap(kubeClient kubernetes.Interface, namespace string,
+	configMap *api_v1.ConfigMap) error {
+
+	_, err := kubeClient.CoreV1().ConfigMaps(namespace).Update(configMap)
 	return err
 }
 
+// configMapHasAnnotation indicates whether this configMap has the annotation
+// we are looking for.
 func configMapHasAnnotation(configMap *api_v1.ConfigMap) bool {
 	if annotation := configMap.Annotations[CurlAnnotation]; len(annotation) != 0 {
 		return true
@@ -203,6 +217,8 @@ func configMapHasAnnotation(configMap *api_v1.ConfigMap) bool {
 	return false
 }
 
+// stripNamespaceFromName when received from an event the resource name includes
+// the namespace with a forward slash separator.
 func stripNamespaceFromName(raw string) string {
 	parts := strings.Split(raw, "/")
 	if len(parts) != 2 {

@@ -1,9 +1,12 @@
 apiVersion: v1
 data:
   special.how: very
+  special.power: bubbling
   special.type: charm
-  special.power: flying
 kind: ConfigMap
 metadata:
   name: special-config
+  annotations:
+    x-k8s.io/curl-me-that: "joke=curl-a-joke.herokuapp.com"
   namespace: default
+
