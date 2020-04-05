@@ -162,7 +162,8 @@ func fetchSiteData(fRequest *FetchRequest) (*FetchResponse, error) {
 }
 
 // fetchConfigMap using a kubernetes client.
-func fetchConfigMap(kubeClient kubernetes.Interface, namespace string, configMapName string) (*api_v1.ConfigMap, error) {
+func fetchConfigMap(kubeClient kubernetes.Interface, namespace string,
+	configMapName string) (*api_v1.ConfigMap, error) {
 
 	configMap, err := kubeClient.CoreV1().ConfigMaps(namespace).
 		Get(configMapName, v1.GetOptions{})
