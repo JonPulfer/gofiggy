@@ -2,8 +2,11 @@
 
 My first controller and learned a lot along the way.
 
-I have a script to create the kind cluster the you run from the root of this 
+
+I have a script to create the kind cluster that you run from the root of this 
 repos like so: -
+
+_NB: assumes docker is installed (running too otherwise you get an error) and also kind needs to be installed_
 
 ```bash
 ./bin/create_cluster.sh
@@ -25,4 +28,4 @@ To run the controller: -
 kubectl create -f gofiggy.yaml
 ```
 
-From this point you can create and update configmaps and see what happens.
+From this point you can create and update config maps and see what happens.
