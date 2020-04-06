@@ -142,6 +142,10 @@ func TestProcessConfigMap(t *testing.T) {
 	}
 
 	if len(plainConfigMap.Annotations[CurlAnnotation]) > 0 {
-		t.Fail()
+		t.FailNow()
+	}
+
+	if len(plainConfigMap.Data) != 1 {
+		t.FailNow()
 	}
 }
