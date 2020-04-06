@@ -115,4 +115,33 @@ func TestProcessConfigMap(t *testing.T) {
 		t.FailNow()
 	}
 	t.Logf("joke = %s", joke)
+
+	plainConfigMapToCreate := &api_v1.ConfigMap{
+		TypeMeta:   v1.TypeMeta{},
+		ObjectMeta: v1.ObjectMeta{
+			Namespace: "default",
+			Name: "plain-config",
+		},
+		Data: map[string]string{
+			"thing": "plain data",
+		},
+	}
+	kubeClient.CoreV1().ConfigMaps("default").
+		Create(plainConfigMapToCreate)
+
+	err = processConfigMap(kubeClient, "default", plainConfigMapToCreate)
+	if err != nil {
+		t.Logf("error processConfigMap: %s", err.Error())
+		t.FailNow()
+	}
+
+	plainConfigMap, err := fetchConfigMap(kubeClient, "default", "plain-config")
+	if err != nil {
+		t.Logf("error creating plain config: %s\n", err.Error())
+		t.FailNow()
+	}
+
+	if len(plainConfigMap.Annotations[CurlAnnotation]) > 0 {
+		t.Fail()
+	}
 }
